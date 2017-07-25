@@ -1,0 +1,42 @@
+{
+    "name": "comments",
+    "displayName": "Comments",
+    "description": "This extension allows you to create comments that won't be saved to the code",
+    "version": "0.0.1",
+    "publisher": "debml",
+    "engines": {
+        "vscode": "^1.14.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onLanguage:csharp"
+    ],
+    "contributes": {
+        "commands": [{
+            "command": "extension.addComment",
+            "title": "Add/Modify comment"
+        }],
+        "menus": {
+            "editor/context": [{
+                "command": "extension.addComment",
+                "group": "1_modification"
+            }]
+        }
+    },
+    "main": "./out/src/extension",
+    "scripts": {
+        "vscode:prepublish": "tsc -p ./",
+        "compile": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "node ./node_modules/vscode/bin/test"
+    },
+    "devDependencies": {
+        "typescript": "^2.0.3",
+        "vscode": "^1.0.0",
+        "mocha": "^2.3.3",
+        "@types/node": "^6.0.40",
+        "@types/mocha": "^2.2.32"
+    }
+}
