@@ -5,8 +5,8 @@ import fs = require('fs')
 export function activate(context: vscode.ExtensionContext) {
 	//Commands
 	vscode.commands.registerCommand('extension.addComment', () => {
-        vscode.window.showInputBox({placeHolder: 'Type your comment here', 
-                                    value: getCommentByFileAndCurrentLine()})
+		vscode.window.showInputBox({placeHolder: 'Type your comment here', 
+									value: getCommentByFileAndCurrentLine()})
 			.then(newComment => addOrModifyComment(newComment))
 	})
 
@@ -20,7 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
 	//one time startup events
 	if (activeEditor) {
 		currentFile = activeEditor.document.fileName.split("/").pop()
-		loadCommentsFromFile()
+		loadAllCommentsFromFile()
 		triggerUpdateDecorations()
 	}
 
@@ -61,17 +61,44 @@ export function activate(context: vscode.ExtensionContext) {
 			triggerUpdateDecorations()
 		}
 	}, null, context.subscriptions)
+	
+	vscode.workspace.onDidCloseTextDocument(file => {
+		loadPartialCommentsFromFile(file.fileName.split("/").pop())
+	})
 
 	//Functions
-	function loadCommentsFromFile(){
-        if (!fs.existsSync(workingDir + '/comments.json'))
-            return
+	function loadAllCommentsFromFile(){
+		if (!fs.existsSync(workingDir + '/comments.ce.json'))
+			return
 
-		commentsJson = JSON.parse(fs.readFileSync(workingDir + '/comments.json','utf8'))
+		commentsJson = JSON.parse(fs.readFileSync(workingDir + '/comments.ce.json','utf8'))
+	}
+	
+	function loadPartialCommentsFromFile(fileName){
+		if (!fs.existsSync(workingDir + '/comments.ce.json'))
+			return
+
+		let tempCommentsJson = JSON.parse(fs.readFileSync(workingDir + '/comments.ce.json','utf8'))
+
+        //if the file does not exist, exit the method
+        if (!tempCommentsJson.hasOwnProperty(fileName) && !commentsJson.hasOwnProperty(fileName)) {
+            return
+        }
+		// if the local version of comments has one for the file but the one saved doesn't
+		else if (!tempCommentsJson.hasOwnProperty(fileName) && commentsJson.hasOwnProperty(fileName)) {
+			delete commentsJson[fileName]
+		}
+		// copy previously saved values to local copy
+		else {
+			if (!commentsJson.hasOwnProperty(fileName))
+				commentsJson[fileName] = {}
+
+			commentsJson[fileName] = tempCommentsJson[fileName]
+		}
 	}
 
 	function saveCommentsToFile(){
-		fs.writeFileSync(workingDir + '/comments.json', JSON.stringify(commentsJson), 'utf8')
+		fs.writeFileSync(workingDir + '/comments.ce.json', JSON.stringify(commentsJson), 'utf8')
 	}
 
 	function saveCommentsToFileIfNotDirty(){
@@ -126,13 +153,11 @@ export function activate(context: vscode.ExtensionContext) {
 	function getCommentByFileAndCurrentLine(){
 		let selection = vscode.window.activeTextEditor.selection
 		
-		if (!commentsJson.hasOwnProperty(currentFile))
-			return ""
-
-		if (commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
+        if (!commentsJson.hasOwnProperty(currentFile) 
+            || !commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
+            return ""
+        else
 			return commentsJson[currentFile][selection.active.line + 1]
-		else
-			return ""
 	}
 
 	function recalculateCommentLine(changes){
