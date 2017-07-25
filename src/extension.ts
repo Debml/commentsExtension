@@ -14,8 +14,8 @@ export function activate(context: vscode.ExtensionContext) {
 	let activeEditor = vscode.window.activeTextEditor
 	let workingDir = vscode.workspace.rootPath
 	let currentFile
-    let commentsJson
-    
+	let commentsJson
+	
 	//one time startup events
 	if (activeEditor) {
 		currentFile = activeEditor.document.fileName.split("/").pop()
@@ -81,8 +81,13 @@ export function activate(context: vscode.ExtensionContext) {
 
 		let selection = vscode.window.activeTextEditor.selection
 
-		if (newComment != "")
+		if (newComment != ""){
+			//first comment for the file, add the object for the file first
+			if (!commentsJson.hasOwnProperty(currentFile))
+				commentsJson[currentFile] = {}
+
 			commentsJson[currentFile][selection.active.line + 1] = newComment
+		}
 		else
 			delete commentsJson[currentFile][selection.active.line + 1]
 
@@ -112,6 +117,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	function getCommentByFileAndCurrentLine(){
 		let selection = vscode.window.activeTextEditor.selection
+		
+		if (!commentsJson.hasOwnProperty(currentFile))
+			return ""
 
 		if (commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
 			return commentsJson[currentFile][selection.active.line + 1]
@@ -120,16 +128,16 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function recalculateCommentLine(changes){
-        //new line was added
+		//new line was added
 		if (changes[0].text.includes("\n")){
-            //before the line
+			//before the line
 			if (parseInt(changes[0].range._end._character) <= 0)
-                modifyCommentLineNumber(1, changes[0].range._end._line, ">=")
-            //after the line
+				modifyCommentLineNumber(1, changes[0].range._end._line, ">=")
+			//after the line
 			else
 				modifyCommentLineNumber(1, changes[0].range._end._line, ">")
-        }
-        //line was removed
+		}
+		//line was removed
 		else if (changes[0].text == ""){
 			if (parseInt(changes[0].range._start._line) != parseInt(changes[0].range._end._line))
 				modifyCommentLineNumber(-1, changes[0].range._end._line, ">=")
@@ -138,26 +146,26 @@ export function activate(context: vscode.ExtensionContext) {
 
 	function modifyCommentLineNumber(delta, lineModified, operator){
 		let fileComments = commentsJson[currentFile]
-        let operatorFactor
-        
-        //assigns a factor to calculate the correct operator without writing several conditions
-        switch (operator) {
-            case ">":
-                operatorFactor = 0
-            break
-            case ">=":
-                operatorFactor = -1
-            break
+		let operatorFactor
+		
+		//assigns a factor to calculate the correct operator without writing several conditions
+		switch (operator) {
+			case ">":
+				operatorFactor = 0
+			break
+			case ">=":
+				operatorFactor = -1
+			break
 		}
 
-        //copies the value of the old line into the new line
+		//copies the value of the old line into the new line
 		for (const lineNo in fileComments){
-            let intLineNo = parseInt(lineNo)
-            
-            if (intLineNo - 1 > lineModified + operatorFactor) {
-                fileComments[intLineNo + delta] = fileComments[lineNo]
-                delete fileComments[lineNo]
-            }
+			let intLineNo = parseInt(lineNo)
+
+			if (intLineNo - 1 > lineModified + operatorFactor) {
+				fileComments[intLineNo + delta] = fileComments[lineNo]
+				delete fileComments[lineNo]
+			}
 		}
 	}
 
