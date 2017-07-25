@@ -81,15 +81,19 @@ export function activate(context: vscode.ExtensionContext) {
 
 		let selection = vscode.window.activeTextEditor.selection
 
-		if (newComment != ""){
+		if (newComment != "") {
 			//first comment for the file, add the object for the file first
 			if (!commentsJson.hasOwnProperty(currentFile))
 				commentsJson[currentFile] = {}
 
 			commentsJson[currentFile][selection.active.line + 1] = newComment
 		}
-		else
+		else {
 			delete commentsJson[currentFile][selection.active.line + 1]
+
+			if (Object.keys(commentsJson[currentFile]).length === 0)
+				delete commentsJson[currentFile]
+		}
 
 		triggerUpdateDecorations()
 		saveCommentsToFileIfNotDirty()
@@ -180,7 +184,6 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!activeEditor)
 			return
 
-		if (commentsJson.hasOwnProperty(currentFile))
-			loadCommentsToCode(currentFile)
+		loadCommentsToCode(currentFile)
 	}
 }
