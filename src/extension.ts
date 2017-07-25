@@ -5,7 +5,8 @@ import fs = require('fs')
 export function activate(context: vscode.ExtensionContext) {
 	//Commands
 	vscode.commands.registerCommand('extension.addComment', () => {
-		vscode.window.showInputBox({placeHolder: 'Type your comment here', value: getCommentByFileAndCurrentLine()})
+        vscode.window.showInputBox({placeHolder: 'Type your comment here', 
+                                    value: getCommentByFileAndCurrentLine()})
 			.then(newComment => addOrModifyComment(newComment))
 	})
 
@@ -13,8 +14,8 @@ export function activate(context: vscode.ExtensionContext) {
 	let timeout = null
 	let activeEditor = vscode.window.activeTextEditor
 	let workingDir = vscode.workspace.rootPath
-	let currentFile
-	let commentsJson
+	let currentFile = ""
+	let commentsJson = {}
 	
 	//one time startup events
 	if (activeEditor) {
@@ -63,6 +64,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	//Functions
 	function loadCommentsFromFile(){
+        if (!fs.existsSync(workingDir + '/comments.json'))
+            return
+
 		commentsJson = JSON.parse(fs.readFileSync(workingDir + '/comments.json','utf8'))
 	}
 
