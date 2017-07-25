@@ -1,54 +1,22 @@
-import * as vscode from 'vscode';
-import fs = require('fs');
+import * as vscode from 'vscode'
+import fs = require('fs')
 
 // this method is called when vs code is activated
 export function activate(context: vscode.ExtensionContext) {
+    //Commands
     vscode.commands.registerCommand('extension.addComment', () => {
         vscode.window.showInputBox({placeHolder: 'Type your comment here', value: getCommentByFileAndCurrentLine()})
-            .then(newComment => addCommentToFile(newComment));
-    });
+            .then(newComment => updateCommentLocally(newComment))
+    })
 
-    function getCommentByFileAndCurrentLine(){
-        const workingDir = vscode.workspace.rootPath
-        var comments = fs.readFileSync(workingDir + '/comments.json','utf8');
-        comments = JSON.parse(comments)
+    //Global variables
+    let timeout = null
+    let activeEditor = vscode.window.activeTextEditor
+    let workingDir = vscode.workspace.rootPath
+    let currentFile
+    let commentsJson
 
-        let currentFileWithPath = activeEditor.document.fileName
-        let currentFile = currentFileWithPath.split("/").pop()
-
-        var editor = vscode.window.activeTextEditor;
-        var selection = editor.selection;
-
-        if (comments[currentFile].hasOwnProperty(selection.active.line + 1))
-            return comments[currentFile][selection.active.line + 1]
-        else
-            return ""
-    }
-
-    function addCommentToFile(newComment){
-        if (newComment == undefined)
-            return
-
-        const workingDir = vscode.workspace.rootPath
-        var comments = fs.readFileSync(workingDir + '/comments.json','utf8');
-        comments = JSON.parse(comments)
-
-        let currentFileWithPath = activeEditor.document.fileName
-        let currentFile = currentFileWithPath.split("/").pop()
-
-        var editor = vscode.window.activeTextEditor;
-        var selection = editor.selection;
-
-        if (newComment != "")
-            comments[currentFile][selection.active.line + 1] = newComment
-        else
-            delete comments[currentFile][selection.active.line + 1]
-
-        fs.writeFileSync(workingDir + '/comments.json', JSON.stringify(comments), 'utf8')
-        triggerUpdateDecorations()
-    }
-
-	// create a decorator type that we use to decorate small numbers
+    //Decorator that highlights a line of code that contains a comment
 	const textHighlightDecoration = vscode.window.createTextEditorDecorationType({
 		borderWidth: '1px',
 		borderStyle: 'solid',
@@ -64,110 +32,61 @@ export function activate(context: vscode.ExtensionContext) {
         },
         backgroundColor: 'blue',
         cursor : 'pointer'
-	});
+	})
 
-    let activeEditor = vscode.window.activeTextEditor;
-    
-	if (activeEditor) {
-		triggerUpdateDecorations();
-	}
+    //Listeners
+    vscode.workspace.onDidSaveTextDocument(file => {
+        saveCommentsToFile()
+    })
 
-	vscode.window.onDidChangeActiveTextEditor(editor => {
-		activeEditor = editor;
-		if (editor) {
-			triggerUpdateDecorations()
-		}
-	}, null, context.subscriptions);
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+        activeEditor = editor
+        currentFile = activeEditor.document.fileName.split("/").pop()
+
+		if (editor)
+            triggerUpdateDecorations()
+    }, null, context.subscriptions)
 
 	vscode.workspace.onDidChangeTextDocument(event => {
 		if (activeEditor && event.document === activeEditor.document) {
-            updateCommentsFile(event.contentChanges)
+            recalculateCommentLine(event.contentChanges)
 			triggerUpdateDecorations()
 		}
-	}, null, context.subscriptions);
+	}, null, context.subscriptions)
 
-	var timeout = null;
-	function triggerUpdateDecorations() {
-		if (timeout) {
-			clearTimeout(timeout);
-		}
-        timeout = setTimeout(updateDecorations, 500);
+    //Functions
+    function loadCommentsFromFile(){
+        commentsJson = JSON.parse(fs.readFileSync(workingDir + '/comments.json','utf8'))
     }
 
-    function updateCommentsFile(changes){
-        const workingDir = vscode.workspace.rootPath
-        var comments = fs.readFileSync(workingDir + '/comments.json','utf8');
-        comments = JSON.parse(comments)
-
-        if (changes[0].text.includes("\n")){
-            if (parseInt(changes[0].range._end._character) <= 0)
-                modifyCommentLineNumber(comments, 1, changes[0].range._end._line, ">=")
-            else
-                modifyCommentLineNumber(comments, 1, changes[0].range._end._line, ">")
-        }
-        else if (changes[0].text == ""){
-            if (parseInt(changes[0].range._start._line) != parseInt(changes[0].range._end._line))
-                modifyCommentLineNumber(comments, -1, changes[0].range._end._line, ">=")
-        }
+    function saveCommentsToFile(){
+        fs.writeFileSync(workingDir + '/comments.json', JSON.stringify(commentsJson), 'utf8')
     }
 
-    function modifyCommentLineNumber(comments, delta, lineModified, operator){
-        let currentFileWithPath = activeEditor.document.fileName
-        let currentFile = currentFileWithPath.split("/").pop()
-
-        var fileComments = comments[currentFile]
-        var fileCommentsAsString = JSON.stringify(fileComments);
-
-        for (const lineNo in fileComments){
-            switch (operator)
-            {
-                case ">":
-                    if (parseInt(lineNo) - 1 > lineModified){
-                        fileCommentsAsString = fileCommentsAsString.replace(lineNo, String(parseInt(lineNo) + delta));
-                    }
-                break;
-                case ">=":
-                    if (parseInt(lineNo) - 1 >= lineModified){
-                        fileCommentsAsString = fileCommentsAsString.replace(lineNo, String(parseInt(lineNo) + delta));
-                    }
-                break;
-            }
-
-        }
-
-        const fileCommentsAsJson = JSON.parse(fileCommentsAsString)
-        comments[currentFile] = fileCommentsAsJson
-        
-        const workingDir = vscode.workspace.rootPath
-        fs.writeFileSync(workingDir + '/comments.json', JSON.stringify(comments), 'utf8')
+    function saveCommentsToFileIfNotDirty(){
+        if (!activeEditor.document.isDirty)
+            saveCommentsToFile()
     }
 
-	function updateDecorations() {
-		if (!activeEditor) {
-			return;
-        }
+    function updateCommentLocally(newComment){
+        if (newComment == undefined)
+            return
 
-        let comments = JSON.parse(loadCommentsFile())
-        let files = vscode.workspace.textDocuments
-        let currentFileWithPath = activeEditor.document.fileName
-        let currentFile = currentFileWithPath.split("/").pop()
+        let selection = vscode.window.activeTextEditor.selection
 
-        files.forEach(function (file){ 
-            if (currentFileWithPath == file.fileName)
-                loadCurrentFileComments(comments[currentFile])
-        });
+        if (newComment != "")
+            commentsJson[currentFile][selection.active.line + 1] = newComment
+        else
+            delete commentsJson[currentFile][selection.active.line + 1]
+
+        triggerUpdateDecorations()
+        saveCommentsToFileIfNotDirty()
     }
 
-    function loadCommentsFile(){
-        const workingDir = vscode.workspace.rootPath
-        const jsonText = fs.readFileSync(workingDir + '/comments.json','utf8');
-        return jsonText
-    }
-    
-    function loadCurrentFileComments(comments){
-        const commentedLines: vscode.DecorationOptions[] = [];
+    function loadCommentsToCode(file){
+        const commentedLines: vscode.DecorationOptions[] = []
 
-        for (let lineNo in comments){
+        for (let lineNo in commentsJson[file]){
             const lineText = vscode.window.activeTextEditor.document.lineAt(parseInt(lineNo) - 1).text
 
             const startPos = new vscode.Position(parseInt(lineNo) - 1, 0)
@@ -175,12 +94,80 @@ export function activate(context: vscode.ExtensionContext) {
 
             const decoration = { 
                 range: new vscode.Range(startPos, endPos), 
-                hoverMessage: comments[lineNo] 
-            };
+                hoverMessage: commentsJson[file][lineNo] 
+            }
 
-            commentedLines.push(decoration);
+            commentedLines.push(decoration)
         }
 
-        activeEditor.setDecorations(textHighlightDecoration, commentedLines);
+        activeEditor.setDecorations(textHighlightDecoration, commentedLines)
     }
+
+    function getCommentByFileAndCurrentLine(){
+        let selection = vscode.window.activeTextEditor.selection
+
+        if (commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
+            return commentsJson[currentFile][selection.active.line + 1]
+        else
+            return ""
+    }
+
+    function recalculateCommentLine(changes){
+        if (changes[0].text.includes("\n")){
+            if (parseInt(changes[0].range._end._character) <= 0)
+                modifyCommentLineNumber(1, changes[0].range._end._line, ">=")
+            else
+                modifyCommentLineNumber(1, changes[0].range._end._line, ">")
+        }
+        else if (changes[0].text == ""){
+            if (parseInt(changes[0].range._start._line) != parseInt(changes[0].range._end._line))
+                modifyCommentLineNumber(-1, changes[0].range._end._line, ">=")
+        }
+    }
+
+    function modifyCommentLineNumber(delta, lineModified, operator){
+        var fileComments = commentsJson[currentFile]
+        var fileCommentsAsString = JSON.stringify(fileComments)
+
+        for (const lineNo in fileComments){
+            switch (operator)
+            {
+                case ">":
+                    if (parseInt(lineNo) - 1 > lineModified){
+                        fileCommentsAsString = fileCommentsAsString.replace(lineNo, String(parseInt(lineNo) + delta))
+                    }
+                break
+                case ">=":
+                    if (parseInt(lineNo) - 1 >= lineModified){
+                        fileCommentsAsString = fileCommentsAsString.replace(lineNo, String(parseInt(lineNo) + delta))
+                    }
+                break
+            }
+        }
+
+        const fileCommentsAsJson = JSON.parse(fileCommentsAsString)
+        commentsJson[currentFile] = fileCommentsAsJson
+    }
+
+	function triggerUpdateDecorations() {
+		if (timeout) 
+			clearTimeout(timeout)
+        
+        timeout = setTimeout(updateDecorations, 500)
+    }
+
+	function updateDecorations() {
+		if (!activeEditor)
+			return
+
+        if (commentsJson.hasOwnProperty(currentFile))
+            loadCommentsToCode(currentFile)
+    }
+
+    //one time startup events
+	if (activeEditor) {
+        currentFile = activeEditor.document.fileName.split("/").pop()
+        loadCommentsFromFile()
+		triggerUpdateDecorations()
+	}
 }
