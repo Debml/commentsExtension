@@ -129,10 +129,10 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!commentsJson.hasOwnProperty(currentFile))
 				commentsJson[currentFile] = {}
 
-			commentsJson[currentFile][selection.active.line + 1] = newComment
+			commentsJson[currentFile][selection.start.line + 1] = newComment
 		}
 		else {
-			delete commentsJson[currentFile][selection.active.line + 1]
+			delete commentsJson[currentFile][selection.start.line + 1]
 
 			if (Object.keys(commentsJson[currentFile]).length === 0)
 				delete commentsJson[currentFile]
@@ -166,10 +166,10 @@ export function activate(context: vscode.ExtensionContext) {
 		let selection = vscode.window.activeTextEditor.selection
 		
 		if (!commentsJson.hasOwnProperty(currentFile) 
-			|| !commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
+			|| !commentsJson[currentFile].hasOwnProperty(selection.start.line + 1))
 			return ""
 		else
-			return commentsJson[currentFile][selection.active.line + 1]
+			return commentsJson[currentFile][selection.start.line + 1]
 	}
 
 	function recalculateCommentLine(changes){
