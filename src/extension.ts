@@ -10,6 +10,10 @@ export function activate(context: vscode.ExtensionContext) {
 			.then(newComment => addOrModifyComment(newComment))
 	})
 
+	vscode.commands.registerCommand('extension.toggleComments',() => {
+		toggleComments()
+	})
+
 	//Global variables
 	let timeout = null
 	let activeEditor = vscode.window.activeTextEditor
@@ -17,6 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let commentsFile = workingDir + '/comments.ce.json'
 	let currentFile = ""
 	let commentsJson = {}
+	let showComments = false
 	
 	//one time startup events
 	if (activeEditor) {
@@ -145,18 +150,20 @@ export function activate(context: vscode.ExtensionContext) {
 	function loadCommentsToCode(file){
 		const commentedLines: vscode.DecorationOptions[] = []
 
-		for (let lineNo in commentsJson[file]){
-			const lineText = vscode.window.activeTextEditor.document.lineAt(parseInt(lineNo) - 1).text
+		if (showComments){
+			for (let lineNo in commentsJson[file]){
+				const lineText = vscode.window.activeTextEditor.document.lineAt(parseInt(lineNo) - 1).text
 
-			const startPos = new vscode.Position(parseInt(lineNo) - 1, 0)
-			const endPos = new vscode.Position(parseInt(lineNo) - 1, lineText.length)
+				const startPos = new vscode.Position(parseInt(lineNo) - 1, 0)
+				const endPos = new vscode.Position(parseInt(lineNo) - 1, lineText.length)
 
-			const decoration = { 
-				range: new vscode.Range(startPos, endPos), 
-				hoverMessage: commentsJson[file][lineNo] 
+				const decoration = { 
+					range: new vscode.Range(startPos, endPos), 
+					hoverMessage: commentsJson[file][lineNo] 
+				}
+
+				commentedLines.push(decoration)
 			}
-
-			commentedLines.push(decoration)
 		}
 
 		activeEditor.setDecorations(textHighlightDecoration, commentedLines)
@@ -184,11 +191,14 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		//line(s) was removed
 		else if (changes[0].text == ""){
-			deleteCommentsIfNeeded(parseInt(changes[0].range._start._line), 
-								parseInt(changes[0].range._end._line))
+			let startLine = parseInt(changes[0].range._start._line)
+			let endLine = parseInt(changes[0].range._end._line)
 
-			if (parseInt(changes[0].range._start._line) != parseInt(changes[0].range._end._line))
-				modifyCommentLineNumber(-changes[0].rangeLength, changes[0].range._end._line, ">=")
+			deleteCommentsIfNeeded(startLine, endLine)
+
+
+			if (startLine != endLine)
+				modifyCommentLineNumber(-(endLine - startLine + 1), changes[0].range._end._line, ">=")
 		}
 	}
 
@@ -243,5 +253,10 @@ export function activate(context: vscode.ExtensionContext) {
 			return
 
 		loadCommentsToCode(currentFile)
+	}
+
+	function toggleComments() {
+		showComments = !showComments
+		updateDecorations()
 	}
 }

@@ -17,13 +17,23 @@
         "commands": [{
             "command": "extension.addComment",
             "title": "Add/Modify comment"
+        },
+        {
+            "command": "extension.toggleComments",
+            "title": "Toggle show/hide comments"
         }],
         "menus": {
             "editor/context": [{
                 "command": "extension.addComment",
                 "group": "1_modification"
             }]
-        }
+        },
+        "keybindings": [{
+            "command": "extension.toggleComments",
+            "key": "ctrl+f1",
+            "mac": "cmd+f1",
+            "when": "editorTextFocus"
+        }]
     },
     "main": "./out/src/extension",
     "scripts": {
