@@ -13,8 +13,8 @@ export function activate(context: vscode.ExtensionContext) {
 	//Global variables
 	let timeout = null
 	let activeEditor = vscode.window.activeTextEditor
-    let workingDir = vscode.workspace.rootPath
-    let commentsFile = workingDir + '/comments.ce.json'
+	let workingDir = vscode.workspace.rootPath
+	let commentsFile = workingDir + '/comments.ce.json'
 	let currentFile = ""
 	let commentsJson = {}
 	
@@ -81,10 +81,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 		let tempCommentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
 
-        //if the file does not exist, exit the method
-        if (!tempCommentsJson.hasOwnProperty(fileName) && !commentsJson.hasOwnProperty(fileName)) {
-            return
-        }
+		//if the file does not exist, exit the method
+		if (!tempCommentsJson.hasOwnProperty(fileName) && !commentsJson.hasOwnProperty(fileName)) {
+			return
+		}
 		// if the local version of comments has one for the file but the one saved doesn't
 		else if (!tempCommentsJson.hasOwnProperty(fileName) && commentsJson.hasOwnProperty(fileName)) {
 			delete commentsJson[fileName]
@@ -99,17 +99,17 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function saveCommentsToFile(){
-        let tempCommentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
+		let tempCommentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
 
-        if (!commentsJson.hasOwnProperty(currentFile))
-            delete tempCommentsJson[currentFile]
-        else {
-            if (!tempCommentsJson.hasOwnProperty(currentFile))
-                tempCommentsJson[currentFile] = {}
+		if (!commentsJson.hasOwnProperty(currentFile))
+			delete tempCommentsJson[currentFile]
+		else {
+			if (!tempCommentsJson.hasOwnProperty(currentFile))
+				tempCommentsJson[currentFile] = {}
 
-            tempCommentsJson[currentFile] = commentsJson[currentFile]
-        }
-        
+			tempCommentsJson[currentFile] = commentsJson[currentFile]
+		}
+		
 		fs.writeFileSync(commentsFile, JSON.stringify(tempCommentsJson), 'utf8')
 	}
 
@@ -165,10 +165,10 @@ export function activate(context: vscode.ExtensionContext) {
 	function getCommentByFileAndCurrentLine(){
 		let selection = vscode.window.activeTextEditor.selection
 		
-        if (!commentsJson.hasOwnProperty(currentFile) 
-            || !commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
-            return ""
-        else
+		if (!commentsJson.hasOwnProperty(currentFile) 
+			|| !commentsJson[currentFile].hasOwnProperty(selection.active.line + 1))
+			return ""
+		else
 			return commentsJson[currentFile][selection.active.line + 1]
 	}
 
@@ -184,40 +184,24 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		//line(s) was removed
 		else if (changes[0].text == ""){
-            /**deleteCommentsIfNeeded(parseInt(changes[0].range._start._line) - 1, 
-                                parseInt(changes[0].range._end._line) + 1,
-                                parseInt(changes[0].range._start._character),
-                                parseInt(changes[0].range._end._character))**/
+			deleteCommentsIfNeeded(parseInt(changes[0].range._start._line), 
+								parseInt(changes[0].range._end._line))
 
 			if (parseInt(changes[0].range._start._line) != parseInt(changes[0].range._end._line))
 				modifyCommentLineNumber(-changes[0].rangeLength, changes[0].range._end._line, ">=")
 		}
-    }
+	}
 
-    function countNewLines(changesText){
-        return changesText.split("\n").length - 1
-    }
-    
-    function deleteCommentsIfNeeded(startLine, endLine, startColumn, endColumn){
-        // if the start range's column is not 0, the whole line was not deleted, exclude it from range
-        /**if (startColumn > 0)
-            startLine += 1
-        else
-            startLine -= 1**/
-
-        /** if the end range's column is not the line's length, 
-         * the whole line was not deleted, exclude it from range**/
-        /**let lineText = vscode.window.activeTextEditor.document.lineAt(endLine - 1).text
-        if (endColumn < lineText.length)
-            endLine -= 1
-        else
-            endLine += 1**/
-
-        for (let lineNo in commentsJson[currentFile]){
-            if (parseInt(lineNo) - 1 > startLine && parseInt(lineNo) - 1 < endLine)
-                delete commentsJson[currentFile][lineNo]
-        }
-    }
+	function countNewLines(changesText){
+		return changesText.split("\n").length - 1
+	}
+	
+	function deleteCommentsIfNeeded(startLine, endLine){
+		for (let lineNo in commentsJson[currentFile]){
+			if (parseInt(lineNo) - 1 >= startLine && parseInt(lineNo) - 1 <= endLine)
+				delete commentsJson[currentFile][lineNo]
+		}
+	}
 
 	function modifyCommentLineNumber(delta, lineModified, operator){
 		let fileComments = commentsJson[currentFile]
