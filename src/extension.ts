@@ -201,6 +201,9 @@ export function activate(context: vscode.ExtensionContext) {
 			if (parseInt(lineNo) - 1 >= startLine && parseInt(lineNo) - 1 <= endLine)
 				delete commentsJson[currentFile][lineNo]
 		}
+
+		if (Object.keys(commentsJson[currentFile]).length === 0)
+			delete commentsJson[currentFile]
 	}
 
 	function modifyCommentLineNumber(delta, lineModified, operator){
