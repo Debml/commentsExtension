@@ -11,11 +11,10 @@ export function activate(context: vscode.ExtensionContext) {
 	})
 
 	vscode.commands.registerCommand('extension.toggleComments',() => {
-		toggleComments()
+		toggleShowComments()
 	})
 
 	//Global variables
-	let timeout = null
 	let activeEditor = vscode.window.activeTextEditor
 	let workingDir = vscode.workspace.rootPath
 	let commentsFile = workingDir + '/comments.ce.json'
@@ -44,8 +43,8 @@ export function activate(context: vscode.ExtensionContext) {
 	//one time startup events
 	if (activeEditor) {
 		currentFile = activeEditor.document.fileName.split("/").pop()
-		loadAllCommentsFromFile()
-		updateDecorations()
+		loadAllComments()
+		setCommentsOnCode()
 	}
 
 	//Listeners
@@ -57,14 +56,13 @@ export function activate(context: vscode.ExtensionContext) {
 		activeEditor = editor
 		currentFile = activeEditor.document.fileName.split("/").pop()
 
-		if (editor)
-			updateDecorations()
+		setCommentsOnCode()
 	}, null, context.subscriptions)
 
 	vscode.workspace.onDidChangeTextDocument(event => {
 		if (activeEditor && event.document === activeEditor.document && event.contentChanges.length != 0) {
 			recalculateCommentLine(event.contentChanges)
-			updateDecorations()
+			setCommentsOnCode()
 		}
 	}, null, context.subscriptions)
 	
@@ -73,18 +71,19 @@ export function activate(context: vscode.ExtensionContext) {
 	})
 
 	//Functions
-	function loadAllCommentsFromFile(){
+	function loadAllComments(){
+		commentsJson = readCommentsFromFile()
+	}
+
+	function readCommentsFromFile(){
 		if (!fs.existsSync(commentsFile))
 			return
 
-		commentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
+		return JSON.parse(fs.readFileSync(commentsFile,'utf8'))
 	}
 	
 	function loadPartialCommentsFromFile(fileName){
-		if (!fs.existsSync(commentsFile))
-			return
-
-		let tempCommentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
+		let tempCommentsJson = readCommentsFromFile
 
 		//if the file does not exist, exit the method
 		if (!tempCommentsJson.hasOwnProperty(fileName) && !commentsJson.hasOwnProperty(fileName)) {
@@ -104,7 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function saveCommentsToFile(){
-		let tempCommentsJson = JSON.parse(fs.readFileSync(commentsFile,'utf8'))
+		let tempCommentsJson = readCommentsFromFile()
 
 		if (!commentsJson.hasOwnProperty(currentFile))
 			delete tempCommentsJson[currentFile]
@@ -124,11 +123,13 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function addOrModifyComment(newComment){
+		//esc was pressed (cancel)
 		if (newComment == undefined)
 			return
 
 		let selection = vscode.window.activeTextEditor.selection
 
+		//if the comment has text
 		if (newComment != "") {
 			//first comment for the file, add the object for the file first
 			if (!commentsJson.hasOwnProperty(currentFile))
@@ -136,6 +137,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 			commentsJson[currentFile][selection.start.line + 1] = newComment
 		}
+		//adding empty comment (delete)
 		else {
 			delete commentsJson[currentFile][selection.start.line + 1]
 
@@ -143,11 +145,11 @@ export function activate(context: vscode.ExtensionContext) {
 				delete commentsJson[currentFile]
 		}
 
-		updateDecorations()
+		setCommentsOnCode()
 		saveCommentsToFileIfNotDirty()
 	}
 
-	function loadCommentsToCode(file){
+	function setDecorations(file){
 		const commentedLines: vscode.DecorationOptions[] = []
 
 		if (showComments){
@@ -181,24 +183,25 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function recalculateCommentLine(changes){
+		const newLines = countNewLines(changes[0].text)
+		const startLine = parseInt(changes[0].range._start._line)
+		const endLine = parseInt(changes[0].range._end._line)
+
 		//line(s) added
-		if (changes[0].text.includes("\n")){
-			//before the line
-			if (parseInt(changes[0].range._end._character) <= 0)
-				modifyCommentLineNumber(countNewLines(changes[0].text), changes[0].range._end._line, ">=")
-			//after the line
+		if (newLines > 0){
+			//added before the text
+			if (activeEditor.document.lineAt(startLine).isEmptyOrWhitespace)
+				shiftCommentDown(newLines, endLine, ">=")
+			//added after the text
 			else
-				modifyCommentLineNumber(countNewLines(changes[0].text), changes[0].range._end._line, ">")
+				shiftCommentDown(newLines, endLine, ">")
 		}
 		//line(s) removed
 		else if (changes[0].text == ""){
-			let startLine = parseInt(changes[0].range._start._line)
-			let endLine = parseInt(changes[0].range._end._line)
+			//deleteCommentsIfNeeded(startLine, endLine)
 
-			deleteCommentsIfNeeded(startLine, endLine)
-
-			if (startLine != endLine)
-				modifyCommentLineNumber(-(endLine - startLine), changes[0].range._end._line, ">=")
+			//if (startLine != endLine)
+				//modifyCommentLineNumber(-(endLine - startLine), changes[0].range._end._line, ">=")
 		}
 	}
 
@@ -216,24 +219,11 @@ export function activate(context: vscode.ExtensionContext) {
 			delete commentsJson[currentFile]
 	}
 
-	function modifyCommentLineNumber(delta, lineModified, operator){
-		let operatorFactor
+	function shiftCommentDown(delta, lineModified, operator){
+		let operatorFactor = getOperatorFactor(operator)
 		var commentsKeys = Object.keys(commentsJson[currentFile]).sort(function(a, b) {
 			return parseInt(b) - parseInt(a)
 		})
-		
-		//assigns a factor to calculate the correct operator without writing several conditions
-		switch (operator) {
-			case ">":
-				operatorFactor = 0
-			break
-			case ">=":
-				operatorFactor = -1
-			break
-			default:
-				operatorFactor = 0
-			break;
-		}
 
 		for (const lineNo in commentsKeys){
 			let intLineNo = parseInt(commentsKeys[lineNo])
@@ -245,15 +235,26 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
-	function updateDecorations() {
+	function getOperatorFactor(operator){
+		switch (operator) {
+			case ">":
+				return 0
+			case ">=":
+				return -1
+			default:
+				return 0
+		}
+	}
+
+	function setCommentsOnCode() {
 		if (!activeEditor)
 			return
 
-		loadCommentsToCode(currentFile)
+		setDecorations(currentFile)
 	}
 
-	function toggleComments() {
+	function toggleShowComments() {
 		showComments = !showComments
-		updateDecorations()
+		setCommentsOnCode()
 	}
 }
