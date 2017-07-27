@@ -23,13 +23,6 @@ export function activate(context: vscode.ExtensionContext) {
 	let commentsJson = {}
 	let showComments = false
 	
-	//one time startup events
-	if (activeEditor) {
-		currentFile = activeEditor.document.fileName.split("/").pop()
-		loadAllCommentsFromFile()
-		triggerUpdateDecorations()
-	}
-
 	//Decorator that highlights a line of code that contains a comment
 	const textHighlightDecoration = vscode.window.createTextEditorDecorationType({
 		borderWidth: '1px',
@@ -48,6 +41,13 @@ export function activate(context: vscode.ExtensionContext) {
 		cursor : 'pointer'
 	})
 
+	//one time startup events
+	if (activeEditor) {
+		currentFile = activeEditor.document.fileName.split("/").pop()
+		loadAllCommentsFromFile()
+		updateDecorations()
+	}
+
 	//Listeners
 	vscode.workspace.onDidSaveTextDocument(file => {
 		saveCommentsToFile()
@@ -58,13 +58,13 @@ export function activate(context: vscode.ExtensionContext) {
 		currentFile = activeEditor.document.fileName.split("/").pop()
 
 		if (editor)
-			triggerUpdateDecorations()
+			updateDecorations()
 	}, null, context.subscriptions)
 
 	vscode.workspace.onDidChangeTextDocument(event => {
 		if (activeEditor && event.document === activeEditor.document) {
 			recalculateCommentLine(event.contentChanges)
-			triggerUpdateDecorations()
+			updateDecorations()
 		}
 	}, null, context.subscriptions)
 	
@@ -143,7 +143,7 @@ export function activate(context: vscode.ExtensionContext) {
 				delete commentsJson[currentFile]
 		}
 
-		triggerUpdateDecorations()
+		updateDecorations()
 		saveCommentsToFileIfNotDirty()
 	}
 
@@ -180,7 +180,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function recalculateCommentLine(changes){
-		//new line(s) was added
+		//line(s) added
 		if (changes[0].text.includes("\n")){
 			//before the line
 			if (parseInt(changes[0].range._end._character) <= 0)
@@ -189,16 +189,15 @@ export function activate(context: vscode.ExtensionContext) {
 			else
 				modifyCommentLineNumber(countNewLines(changes[0].text), changes[0].range._end._line, ">")
 		}
-		//line(s) was removed
+		//line(s) removed
 		else if (changes[0].text == ""){
 			let startLine = parseInt(changes[0].range._start._line)
 			let endLine = parseInt(changes[0].range._end._line)
 
 			deleteCommentsIfNeeded(startLine, endLine)
 
-
 			if (startLine != endLine)
-				modifyCommentLineNumber(-(endLine - startLine + 1), changes[0].range._end._line, ">=")
+				modifyCommentLineNumber(-(endLine - startLine), changes[0].range._end._line, ">=")
 		}
 	}
 
@@ -239,13 +238,6 @@ export function activate(context: vscode.ExtensionContext) {
 				delete fileComments[lineNo]
 			}
 		}
-	}
-
-	function triggerUpdateDecorations() {
-		if (timeout) 
-			clearTimeout(timeout)
-		
-		timeout = setTimeout(updateDecorations, 500)
 	}
 
 	function updateDecorations() {
