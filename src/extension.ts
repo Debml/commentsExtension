@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}, null, context.subscriptions)
 
 	vscode.workspace.onDidChangeTextDocument(event => {
-		if (activeEditor && event.document === activeEditor.document) {
+		if (activeEditor && event.document === activeEditor.document && event.contentChanges.length != 0) {
 			recalculateCommentLine(event.contentChanges)
 			updateDecorations()
 		}
@@ -152,10 +152,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 		if (showComments){
 			for (let lineNo in commentsJson[file]){
-				const lineText = vscode.window.activeTextEditor.document.lineAt(parseInt(lineNo) - 1).text
+				const intLineNo = parseInt(lineNo)
+				const lineText = vscode.window.activeTextEditor.document.lineAt(intLineNo - 1).text
 
-				const startPos = new vscode.Position(parseInt(lineNo) - 1, 0)
-				const endPos = new vscode.Position(parseInt(lineNo) - 1, lineText.length)
+				const startPos = new vscode.Position(intLineNo - 1, 0)
+				const endPos = new vscode.Position(intLineNo - 1, lineText.length)
 
 				const decoration = { 
 					range: new vscode.Range(startPos, endPos), 
@@ -216,8 +217,10 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function modifyCommentLineNumber(delta, lineModified, operator){
-		let fileComments = commentsJson[currentFile]
 		let operatorFactor
+		var commentsKeys = Object.keys(commentsJson[currentFile]).sort(function(a, b) {
+			return parseInt(b) - parseInt(a)
+		})
 		
 		//assigns a factor to calculate the correct operator without writing several conditions
 		switch (operator) {
@@ -227,15 +230,17 @@ export function activate(context: vscode.ExtensionContext) {
 			case ">=":
 				operatorFactor = -1
 			break
+			default:
+				operatorFactor = 0
+			break;
 		}
 
-		//copies the value of the old line into the new line
-		for (const lineNo in fileComments){
-			let intLineNo = parseInt(lineNo)
+		for (const lineNo in commentsKeys){
+			let intLineNo = parseInt(commentsKeys[lineNo])
 
 			if (intLineNo - 1 > lineModified + operatorFactor) {
-				fileComments[intLineNo + delta] = fileComments[lineNo]
-				delete fileComments[lineNo]
+				commentsJson[currentFile][intLineNo + delta] = commentsJson[currentFile][intLineNo]
+				delete commentsJson[currentFile][intLineNo]
 			}
 		}
 	}
