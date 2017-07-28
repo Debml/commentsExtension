@@ -91,7 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 	
 	function loadPartialCommentsFromFile(fileName){
-		let tempCommentsJson = readCommentsFromFile
+		let tempCommentsJson = readCommentsFromFile()
 
 		//if the file does not exist, exit the method
 		if (!tempCommentsJson.hasOwnProperty(fileName) && !commentsJson.hasOwnProperty(fileName)) {
@@ -174,6 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		activeEditor.setDecorations(textHighlightDecoration, commentedLines)
+		return commentedLines.length > 0
 	}
 
 	function getCommentByFileAndLine(file, line){		
@@ -201,10 +202,15 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		//line(s) removed
 		else if (changes[0].text == ""){
-			//deleteCommentsIfNeeded(startLine, endLine)
-
 			//only shift up if the line was completely deleted
 			if (startLine != endLine){
+				let operator = ">"
+				
+				if (changes[0].range._start._character == 0)
+					operator = ">="
+					
+				deleteCommentsIfNeeded(startLine, endLine, operator)
+				
 				if (changes[0].range._end._character == 0)
 					shiftCommentsUp(-(endLine - startLine), endLine, ">=")
 				else
@@ -217,11 +223,18 @@ export function activate(context: vscode.ExtensionContext) {
 		return changesText.split("\n").length - 1
 	}
 	
-	function deleteCommentsIfNeeded(startLine, endLine){
+	function deleteCommentsIfNeeded(startLine, endLine, operator){
+		const operatorFactor = getOperatorFactor(operator)
+		
 		for (let lineNo in commentsJson[currentFile]){
-			if (parseInt(lineNo) - 1 >= startLine && parseInt(lineNo) - 1 <= endLine)
+			const intLineNo = parseInt(lineNo)
+			
+			if (intLineNo - 1 - operatorFactor > startLine && intLineNo - 1 <= endLine)
 				delete commentsJson[currentFile][lineNo]
 		}
+		
+		if (vscode.window.activeTextEditor.document.lineAt(startLine).isEmptyOrWhitespace)
+			delete commentsJson[currentFile][startLine + 1]
 
 		deleteFileFromCommentsIfNeeded(currentFile)
 	}
@@ -231,7 +244,7 @@ export function activate(context: vscode.ExtensionContext) {
 			delete commentsJson[currentFile]
 	}
 
-	function shiftCommentsUp(delta, lineModified, operator){
+	function shiftCommentsUp(delta, lineModified, operator){		
 		let operatorFactor = getOperatorFactor(operator)
 		var commentsKeys = Object.keys(commentsJson[currentFile]).sort()
 
@@ -272,15 +285,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}
 
-	function setCommentsOnCode() {
+	function setCommentsOnCode(){
 		if (!activeEditor)
 			return
 
-		setDecorations(currentFile)
+		return setDecorations(currentFile)
 	}
 
-	function toggleShowComments() {
+	function toggleShowComments(){
 		showComments = !showComments
-		setCommentsOnCode()
+		
+		if (!setCommentsOnCode() && showComments)
+			vscode.window.showInformationMessage("No comments found for current file")
 	}
 }
