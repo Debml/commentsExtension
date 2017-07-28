@@ -5,9 +5,17 @@ import fs = require('fs')
 export function activate(context: vscode.ExtensionContext) {
 	//Commands
 	vscode.commands.registerCommand('extension.addComment', () => {
-		vscode.window.showInputBox({placeHolder: 'Type your comment here', 
-									value: getCommentByFileAndCurrentLine()})
-			.then(newComment => addOrModifyComment(newComment))
+		const selectedLine = vscode.window.activeTextEditor.selection.start.line
+
+		//empty line (spaces/empty)
+		if (activeEditor.document.lineAt(selectedLine).isEmptyOrWhitespace){
+			vscode.window.showErrorMessage("Cannot insert comment to an empty line")
+			return
+		}
+
+		vscode.window.showInputBox({placeHolder: 'Type your comment here (press enter with an empty string to delete or cancel)', 
+									value: getCommentByFileAndLine(currentFile, selectedLine)})
+			.then(comment => insertOrDeleteComment(comment, selectedLine))
 	})
 
 	vscode.commands.registerCommand('extension.toggleComments',() => {
@@ -122,27 +130,23 @@ export function activate(context: vscode.ExtensionContext) {
 			saveCommentsToFile()
 	}
 
-	function addOrModifyComment(newComment){
+	function insertOrDeleteComment(comment, line){
 		//esc was pressed (cancel)
-		if (newComment == undefined)
+		if (comment == undefined)
 			return
 
-		let selection = vscode.window.activeTextEditor.selection
-
 		//if the comment has text
-		if (newComment != "") {
+		if (comment != "") {
 			//first comment for the file, add the object for the file first
 			if (!commentsJson.hasOwnProperty(currentFile))
 				commentsJson[currentFile] = {}
 
-			commentsJson[currentFile][selection.start.line + 1] = newComment
+			commentsJson[currentFile][line + 1] = comment
 		}
-		//adding empty comment (delete)
+		//adding empty comment (actually a delete)
 		else {
-			delete commentsJson[currentFile][selection.start.line + 1]
-
-			if (Object.keys(commentsJson[currentFile]).length === 0)
-				delete commentsJson[currentFile]
+			delete commentsJson[currentFile][line + 1]
+			deleteFileFromCommentsIfNeeded(currentFile)
 		}
 
 		setCommentsOnCode()
@@ -172,14 +176,12 @@ export function activate(context: vscode.ExtensionContext) {
 		activeEditor.setDecorations(textHighlightDecoration, commentedLines)
 	}
 
-	function getCommentByFileAndCurrentLine(){
-		let selection = vscode.window.activeTextEditor.selection
-		
-		if (!commentsJson.hasOwnProperty(currentFile) 
-			|| !commentsJson[currentFile].hasOwnProperty(selection.start.line + 1))
+	function getCommentByFileAndLine(file, line){		
+		if (!commentsJson.hasOwnProperty(file) 
+			|| !commentsJson[file].hasOwnProperty(line + 1))
 			return ""
 		else
-			return commentsJson[currentFile][selection.start.line + 1]
+			return commentsJson[file][line + 1]
 	}
 
 	function recalculateCommentLine(changes){
@@ -189,10 +191,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 		//line(s) added
 		if (newLines > 0){
-			//added before the text
-			if (activeEditor.document.lineAt(startLine).isEmptyOrWhitespace)
+			const startTextLine = activeEditor.document.lineAt(startLine)
+			//added before the line or at the end of the line
+			if (startTextLine.isEmptyOrWhitespace)
 				shiftCommentDown(newLines, endLine, ">=")
-			//added after the text
+			//added on the line after
 			else
 				shiftCommentDown(newLines, endLine, ">")
 		}
@@ -200,8 +203,13 @@ export function activate(context: vscode.ExtensionContext) {
 		else if (changes[0].text == ""){
 			//deleteCommentsIfNeeded(startLine, endLine)
 
-			//if (startLine != endLine)
-				//modifyCommentLineNumber(-(endLine - startLine), changes[0].range._end._line, ">=")
+			//only shift up if the line was completely deleted
+			if (startLine != endLine){
+				if (changes[0].range._end._character == 0)
+					shiftCommentsUp(-(endLine - startLine), endLine, ">=")
+				else
+					shiftCommentsUp(-(endLine - startLine), endLine, ">")
+			}
 		}
 	}
 
@@ -215,8 +223,26 @@ export function activate(context: vscode.ExtensionContext) {
 				delete commentsJson[currentFile][lineNo]
 		}
 
+		deleteFileFromCommentsIfNeeded(currentFile)
+	}
+
+	function deleteFileFromCommentsIfNeeded(file){
 		if (Object.keys(commentsJson[currentFile]).length === 0)
 			delete commentsJson[currentFile]
+	}
+
+	function shiftCommentsUp(delta, lineModified, operator){
+		let operatorFactor = getOperatorFactor(operator)
+		var commentsKeys = Object.keys(commentsJson[currentFile]).sort()
+
+		for (const lineNo in commentsKeys){
+			let intLineNo = parseInt(commentsKeys[lineNo])
+
+			if (intLineNo - 1 > lineModified + operatorFactor) {
+				commentsJson[currentFile][intLineNo + delta] = commentsJson[currentFile][intLineNo]
+				delete commentsJson[currentFile][intLineNo]
+			}
+		}
 	}
 
 	function shiftCommentDown(delta, lineModified, operator){
